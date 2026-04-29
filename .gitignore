@@ -1,69 +1,31 @@
-# Prerequisites
-*.d
-
-# Compiled Object files
-*.slo
-*.lo
-*.o
-*.obj
-
-# Precompiled Headers
-*.gch
-*.pch
-
-# Linker files
-*.ilk
-
-# Debugger Files
-*.pdb
-
-# Compiled Dynamic libraries
-*.so
-*.dylib
-*.dll
-*.so.*
+# --- Python Environment ---
+venv/
+.venv/
+env/
+bin/
+lib/
+include/
+__pycache__/
+*.py[cod]
+*$py.class
 
 
-# Fortran module files
-*.mod
-*.smod
+# for the large GloVe vectors
+*.txt
+# keep source text files if they are small
+!bbc.txt
+!goethe.txt
 
-# Compiled Static libraries
-*.lai
-*.la
-*.a
-*.lib
+# --- Project Specifics ---
+# Ignore the watermarked output files  
+watermarked_*.txt
+experiment_results.csv
 
-# Executables
-*.exe
-*.out
-*.app
+# --- System Files ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
 
-# Build directories
-build/
-Build/
-build-*/
 
-# CMake generated files
-CMakeFiles/
-CMakeCache.txt
-cmake_install.cmake
-Makefile
-install_manifest.txt
-compile_commands.json
-
-# Temporary files
-*.tmp
-*.log
-*.bak
-*.swp
-
-# vcpkg
-vcpkg_installed/
-
-# debug information files
-*.dwo
-
-# test output & cache
-Testing/
-.cache/
+.env
