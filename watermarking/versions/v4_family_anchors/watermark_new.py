@@ -19,8 +19,9 @@ _bert_tok = AutoTokenizer.from_pretrained("bert-base-uncased")
 _bert_model = AutoModelForMaskedLM.from_pretrained("bert-base-uncased")
 _bert_model.eval()
 
+
 def _bert_filter(sentence: str, word: str, candidates: set[str], keep: int = 5) -> set[str]:
-    """using BERT to rank WordNet candidates in context."""
+    """using BERT to rank WordNet candidates in context"""
     if not candidates:
         return candidates
 
@@ -49,7 +50,8 @@ def _bert_filter(sentence: str, word: str, candidates: set[str], keep: int = 5) 
     scored.sort(key=lambda x: x[1], reverse=True)
     return {c for c, _ in scored[:keep]}
 
-def _ensure_nltk():
+
+def ensure_nltk():
     for pkg in ("punkt", "averaged_perceptron_tagger", "wordnet", "stopwords",
                 "punkt_tab", "averaged_perceptron_tagger_eng"):
         for prefix in ("tokenizers", "taggers", "corpora"):
@@ -62,10 +64,11 @@ def _ensure_nltk():
             nltk.download(pkg, quiet=True)
 
 
-_ensure_nltk()
+ensure_nltk()
 
 STOPWORDS = set(stopwords.words("english"))
 PUNCT = set(string.punctuation)
+SEED = "72731923947"
 
 
 def pos_tag(tokens):
@@ -187,7 +190,7 @@ def find_main_sentence(sentences: list[str]) -> tuple[int, str]:
 
 
 def build_families_for_sentences(sentences: list[str]) -> dict[str, set[str]]:
-    """Build synonym families for all eligible content words across *sentences*."""
+    """Build synonym families for all eligible content words across *sentences*"""
     families: dict[str, set[str]] = {}
     for sent in sentences:
         tokens = word_tokenize(sent)
@@ -204,81 +207,91 @@ def build_families_for_sentences(sentences: list[str]) -> dict[str, set[str]]:
     return families
 
 
-def find_anchor_roots(main_sentence: str) -> set[str]:
-    """
-    Return the set of root forms (lower-case) for every content word in the
-    main sentence that has a non-empty synonym family. These roots define
-    which words in other sentences are *anchor words*
-    """
-    main_families = build_families_for_sentences([main_sentence])
-    return set(main_families.keys())
-
-
-def identify_anchors_in_sentence(tagged: list[tuple[str, str]], anchor_roots: set[str]) -> list[int]:
-    """
-    Return the indices (into *tokens*) of anchor words in a tokenised sentence
-    """
-    anchors = []
-    for i, (tok, tag) in enumerate(tagged):
-        if tok.lower() in anchor_roots and is_content_word(tok, tag):
-            anchors.append(i)
-    return anchors
-
-
-def is_green(chain_head: str, candidate: str) -> bool:
-    key = (chain_head.lower() + "|" + candidate.lower()).encode()
+def is_green(anchor_seed: str, candidate: str) -> bool:
+    key = (anchor_seed + "|" + candidate.lower()).encode()
     return int(hashlib.sha256(key).hexdigest(), 16) % 2 == 0
 
 
-def rewrite_sentence(sentence: str,
-                     anchor_roots: set[str],
-                     context_families: dict[str, set[str]]
-                     ) -> tuple[str, list[tuple[str, str]]]:
+def pick_sentence_anchor(tagged: list[tuple[str, str]], anchor_families: dict[str, set[str]]) -> str | None:
     """
-    Rewrite one non-main sentence using chain encoding
+    Return the single anchor *root* to use for this sentence.
 
-    Returns the rewritten sentence and a list of (original, replacement) pairs
+    A token matches if its lower-case form appears in *anchor_member_to_root*, which
+    maps every family member (including the root itself) to the family root.
+    This means any synonym of a main-sentence contextual word can serve as an
+    anchor, not just the root word itself.
+
+    Among all matching tokens, choose the one whose family is smallest.
+    Ties are broken alphabetically (by resolved root) for determinism.
+
+    Returns None if the sentence contains no anchor word.
+    """
+    best_word: str | None = None
+    best_size: int = 0
+    anchor_members = [item for sublist in anchor_families.values() for item in sublist]
+
+    for tok, tag in tagged:
+        word = tok.lower()
+        if word not in anchor_members:
+            continue
+        if not is_content_word(tok, tag):
+            continue
+        fam = build_family(word, tag)
+        if fam is None:                # word has no synonym family -> cannot size it
+            continue
+        size = len(fam)
+        if best_word is None or size < best_size or (size == best_size and word < best_word):
+            best_word = word
+            best_size = size
+
+    return best_word
+
+
+def rewrite_sentence(sentence: str,
+                     anchor_families: dict[str, set[str]],
+                     context_families: dict[str, set[str]],) -> tuple[str, list[tuple[str, str]]]:
+    """
+    Rewrite one non-main sentence using anchor encoding.
+
+    A single anchor root is chosen for the whole sentence via pick_sentence_anchor,
+    which now resolves any family member (not just the root) as a valid anchor.
+    Every non-anchor context word is then evaluated against that fixed anchor:
+    if the word is *red* and a green synonym exists, it is replaced.
+
+    Returns the rewritten sentence and a list of (original, replacement) pairs.
     """
     tokens = word_tokenize(sentence)
     tagged = pos_tag(tokens)
     result = list(tokens)
     changes: list[tuple[str, str]] = []
-    chain_head: str | None = None
+
+    # Pick the single anchor root for this sentence
+    sentence_anchor = pick_sentence_anchor(tagged, anchor_families)
+    if sentence_anchor is None:
+        # No anchor in this sentence — nothing to encode
+        return tokens_to_text(result), changes
+    sentence_seed = str(int(hashlib.sha256((str(SEED) + "|" + sentence_anchor.lower()).encode()).hexdigest(), 16))
 
     for i, (tok, tag) in enumerate(tagged):
-        root = tok.lower()
-
         if not is_content_word(tok, tag):
             continue
+        context_word = tok.lower()
 
-        if root in anchor_roots:
-            # Anchor word: reset chain head, do NOT substitute
-            chain_head = root
+        # Skip any word that belongs to an anchor family (root or member)
+        if context_word in [item for sublist in anchor_families.values() for item in sublist]:
             continue
 
-        # Context (non-anchor) content word
-        if chain_head is None:
-            # No anchor seen yet in this sentence; just update chain head
-            chain_head = root
-            continue
+        if context_word in context_families:
+            members = context_families[context_word]
+            greens = {m for m in members if is_green(sentence_seed, m)}
 
-        if root in context_families:
-            members = context_families[root]
-            greens = {m for m in members if is_green(chain_head, m)}
-
-            if greens and not is_green(chain_head, root):
+            if greens and not is_green(sentence_seed, context_word):
                 # Current word is red and a green substitute exists
                 replacement = sorted(greens)[0]
                 if tok[0].isupper():
                     replacement = replacement.capitalize()
                 result[i] = replacement
                 changes.append((tok, replacement))
-                chain_head = replacement.lower()
-            else:
-                # Already green, or no green substitute available
-                chain_head = root
-        else:
-            chain_head = root
 
     return tokens_to_text(result), changes
 
@@ -291,8 +304,9 @@ def watermark(text: str) -> dict:
     # 1. Find main/anchor sentence via BERT + TextRank
     main_idx, main_sent = find_main_sentence(sentences)
 
-    # 2. Identify anchor roots from the main sentence
-    anchor_roots = find_anchor_roots(main_sent)
+    # 2. Identify anchor families from the main sentence
+    anchor_families = build_families_for_sentences([main_sent])
+    anchor_roots = set(anchor_families.keys())
     if not anchor_roots:
         raise ValueError("Main sentence has no content words with synonym families.")
 
@@ -307,7 +321,9 @@ def watermark(text: str) -> dict:
     for s_idx, sent in enumerate(sentences):
         if s_idx == main_idx:
             continue
-        new_sent, changes = rewrite_sentence(sent, anchor_roots, context_families)
+        new_sent, changes = rewrite_sentence(
+            sent, anchor_families, context_families
+        )
         watermarked_sentences[s_idx] = new_sent
         for orig, new in changes:
             all_changes.append((s_idx, orig, new))
@@ -317,26 +333,25 @@ def watermark(text: str) -> dict:
         "main_sentence_index": main_idx,
         "main_sentence": main_sent,
         "anchor_roots": anchor_roots,
+        "anchor_families": anchor_families,
         "context_families": context_families,
         "changes": all_changes,
     }
 
 
-def detect(text: str, context_families: dict[str, set[str]] | None = None) -> dict:
-
+def detect(text: str) -> dict:
     sentences = sent_tokenize(text)
     if len(sentences) < 2:
         return {"is_watermarked": False, "reason": "too short"}
 
-    main_idx, _ = find_main_sentence(sentences)
-
-    anchor_roots = find_anchor_roots(_)
+    main_idx, main_sent = find_main_sentence(sentences)
+    anchor_families = build_families_for_sentences([main_sent])
+    anchor_roots = set(anchor_families.keys())
     if not anchor_roots:
         return {"is_watermarked": False, "reason": "no anchor roots"}
 
-    if context_families is None:
-        other = [s for i, s in enumerate(sentences) if i != main_idx]
-        context_families = build_families_for_sentences(other)
+    other = [s for i, s in enumerate(sentences) if i != main_idx]
+    context_families = build_families_for_sentences(other)
 
     if not context_families:
         return {"is_watermarked": False, "reason": "no context families"}
@@ -351,32 +366,31 @@ def detect(text: str, context_families: dict[str, set[str]] | None = None) -> di
 
         tokens = word_tokenize(sent)
         tagged = pos_tag(tokens)
-        chain_head: str | None = None
 
+        # Determine the anchor for this sentence
+        sentence_anchor = pick_sentence_anchor(tagged, anchor_families)
+        if sentence_anchor is None:
+            continue  # No anchor in this sentence — skip
+
+        sentence_seed = str(int(hashlib.sha256((str(SEED) + "|" + sentence_anchor.lower()).encode()).hexdigest(), 16))
         for tok, tag in tagged:
-            root = tok.lower()
             if not is_content_word(tok, tag):
                 continue
+            content_word = tok.lower()
+            if content_word in [item for sublist in anchor_families.values() for item in sublist]:
+                continue  # Anchor family words are not tested
 
-            if root in anchor_roots:
-                chain_head = root
-                continue
-
-            if chain_head is not None and root in context_families:
-                green = is_green(chain_head, root)
+            if content_word in context_families:
+                green = is_green(sentence_seed, content_word)
                 total_tested += 1
                 if green:
                     total_green += 1
                 details.append({
                     "sentence": s_idx,
-                    "chain_head": chain_head,
+                    "anchor": sentence_anchor,
                     "token": tok,
                     "green": green,
                 })
-
-            # Advance chain head even if word not in families
-            if is_content_word(tok, tag):
-                chain_head = root
 
     if total_tested == 0:
         return {
@@ -406,9 +420,7 @@ def detect(text: str, context_families: dict[str, set[str]] | None = None) -> di
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    import os
-    _root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
-    with open(os.path.join(_root, "data", "inputs", "text.txt")) as f:
+    with open("../../text.txt") as f:
         DEMO_TEXT = f.read().strip()
 
     SEP = "=" * 70
@@ -433,6 +445,10 @@ if __name__ == "__main__":
     print(f"Anchor roots ({len(result['anchor_roots'])}):")
     print(f"  {sorted(result['anchor_roots'])}")
     print()
+    print(f"Anchor families ({len(result['anchor_families'])}):")
+    for root in sorted(result['anchor_families']):
+        print(f"  {root!r:12s} -> {sorted(result['anchor_families'][root])}")
+    print()
     print(f"Context families ({len(result['context_families'])}):")
     for root in sorted(result['context_families']):
         print(f"  {root!r:12s} -> {sorted(result['context_families'][root])}")
@@ -448,9 +464,7 @@ if __name__ == "__main__":
     print(SEP)
     print("DETECTION — original (unwatermarked) text")
     print(SEP)
-    det_orig = detect(
-        DEMO_TEXT
-    )
+    det_orig = detect(DEMO_TEXT)
     for k, v in det_orig.items():
         if k != "details":
             print(f"  {k}: {v}")
@@ -459,9 +473,7 @@ if __name__ == "__main__":
     print(SEP)
     print("DETECTION — watermarked text")
     print(SEP)
-    det = detect(
-        result["watermarked_text"]
-    )
+    det = detect(result["watermarked_text"])
     for k, v in det.items():
         if k != "details":
             print(f"  {k}: {v}")

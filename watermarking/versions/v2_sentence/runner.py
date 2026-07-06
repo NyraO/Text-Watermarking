@@ -1,5 +1,7 @@
 from watermarking.versions.v2_sentence import sentence_watermark as swm
 from watermarking.versions.v2_sentence import attack as atk
+# v2's own attack.py has no LLM paraphraser; reuse the shared one
+from watermarking.common.attack import paraphrasing_attack
 import os
 
 def save_text(filename, text_content):
@@ -87,21 +89,21 @@ def run_sentence_experiment(file_name):
     except Exception as e:
          print(f"9. Synonym FAILED: {e}")
 
-    # 10. Paraphrasing (LLM Rewrite)
-    # try:
-    #     atk_para = atk.paraphrasing_attack(wm_text, style="formal and concise")
-    #     z_para = swm.detect_sentence_watermark(atk_para, swm.SECRET_KEY)
-    #     print(f"10. LLM Paraphrasing:      {z_para:.2f}")
-    # except Exception as e:
-    #     print(f"10. Paraphrasing FAILED:   {e}")
+    # 10. Paraphrasing (LLM Rewrite via local Ollama server)
+    try:
+        atk_para = paraphrasing_attack(wm_text, style="formal and concise")
+        z_para = swm.detect_sentence_watermark(atk_para, swm.SECRET_KEY)
+        print(f"10. LLM Paraphrasing:      {z_para:.2f}")
+    except Exception as e:
+        print(f"10. LLM Paraphrasing SKIPPED: {e}")
 
     # 11. Active to Passive Transformation
-    # try:
-    #     atk_pass = atk.syn_transform(wm_text, strength=2)
-    #     z_pass = swm.detect_sentence_watermark(atk_pass, swm.SECRET_KEY)
-    #     print(f"11. Active/Passive:        {z_pass:.2f}")
-    # except Exception as e:
-    #     print(f"11. Active/Passive FAILED: {e} (Check act_pas_lib)")
+    try:
+        atk_pass = atk.syn_transform(wm_text, strength=2)
+        z_pass = swm.detect_sentence_watermark(atk_pass, swm.SECRET_KEY)
+        print(f"11. Active/Passive:        {z_pass:.2f}")
+    except Exception as e:
+        print(f"11. Active/Passive FAILED: {e}")
 
     print(f"\n--- BENCHMARK COMPLETE FOR {file_name} ---")
 

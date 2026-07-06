@@ -11,7 +11,9 @@
 **Config:** `SECRET_KEY` at the top of `sentence_watermark.py`.
 
 **Attacks:** this version keeps its **own** `attack.py` (a divergent, trimmed
-copy — no active/passive transform). It is intentionally *not* the shared
-`common/attack.py`. TODO: reconcile the two attack modules.
+copy). It now includes the active/passive transform (`syn_transform`), which
+imports `active_to_passive` from the shared `common/act_pas` library. It still
+lacks `paraphrasing_attack` / `reorder_random` that `common/attack.py` has.
+TODO: fully reconcile the two attack modules.
 
 **Run:** `python -m experiments.run --version v2`

@@ -7,11 +7,8 @@ from nltk import pos_tag
 
 from random import randrange
 from nltk import sent_tokenize
-# Ensure you have your active/passive library installed/accessible
-try:
-    from act_pas_lib.act_pas import active_to_passive
-except ImportError:
-    pass # Will gracefully fail in the runner
+# Active/passive transform, shared from the common act_pas library
+from watermarking.common.act_pas.act_pas import active_to_passive
 
 def tokenizer(text):
     """Splits text into words and punctuation marks."""

@@ -64,7 +64,13 @@ def run_experiment(file_name):
     z_syn = wm.detect_watermark(wm.simple_tokenize(atk_syn), wm.SECRET_KEY, wm.TAU, v_dict)
     print(f"9. Synonym Attack (30%):   {z_syn:.2f}")
 
-    # 10. Paraphrasing (LLM Rewrite) missing 
+    # 10. Paraphrasing (LLM Rewrite via local Ollama server)
+    try:
+        atk_para = atk.paraphrasing_attack(wm_text, style="formal and concise")
+        z_para = wm.detect_watermark(wm.simple_tokenize(atk_para), wm.SECRET_KEY, wm.TAU, v_dict)
+        print(f"10. LLM Paraphrasing:      {z_para:.2f}")
+    except Exception as e:
+        print(f"10. LLM Paraphrasing SKIPPED: {e}")
 
     # Active to Passive Transformation
     try:

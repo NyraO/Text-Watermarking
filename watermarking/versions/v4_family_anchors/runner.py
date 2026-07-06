@@ -91,6 +91,12 @@ def run_experiment(file_name):
     atk_syn = atk.synonym_attack(wm_text, replace_prob=0.3)
     print(f"9. Synonym Attack (30%):   {_z(detect(atk_syn))}")
 
+    # Paraphrasing (LLM Rewrite via local Ollama server)
+    try:
+        atk_para = atk.paraphrasing_attack(wm_text, style="formal and concise")
+        print(f"10. LLM Paraphrasing:      {_z(detect(atk_para))}")
+    except Exception as e:
+        print(f"10. LLM Paraphrasing SKIPPED: {e}")
 
     print(f"\n--- BENCHMARK COMPLETE FOR {file_name} ---")
 

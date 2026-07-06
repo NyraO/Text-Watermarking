@@ -4,6 +4,7 @@ import re
 from nltk.corpus import wordnet as wn
 from nltk import pos_tag
 # from groq import Groq
+from openai import OpenAI 
 from random import randrange
 from nltk import sent_tokenize
 from watermarking.common.act_pas.act_pas import *
@@ -183,12 +184,9 @@ def generative_attack(text, token, n):
     return rebuild_text(output_words)
 
 
-def paraphrasing_attack(text, style, temperature=0.6, top_p=0.6, size=1):
-    """
-    Paraphrase a sentence using LLM
-    """
 
-    key = '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'
+
+def paraphrasing_attack(text, style, temperature=0.6, top_p=0.6, size=1):
     task = f"""
     You are a paraphrasing engine. Rewrite the user's text while preserving meaning
     Style: {style}.
@@ -198,10 +196,10 @@ def paraphrasing_attack(text, style, temperature=0.6, top_p=0.6, size=1):
     - Produce natural and fluent English
     """
 
-    client = Groq(api_key=key)
+    client = OpenAI(base_url="http://localhost:11434/v1", api_key="ollama")  # replaced Groq(api_key=key) line
     res = ""
     completion = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
+        model="llama3.1:8b",  # replaced "llama-3.3-70b-versatile"
         messages=[
             {"role": "system", "content": task},
             {"role": "user", "content": text}

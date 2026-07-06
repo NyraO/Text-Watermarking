@@ -14,7 +14,7 @@ watermarking/
 └── versions/
     ├── v1_baseline_glove/      # word-level, GloVe contextual candidates
     ├── v2_sentence/            # sentence-level, SentenceTransformer + T5 (own attack.py)
-    ├── v3_tfidf/               # TF-IDF + LexRank word families (CPU only)
+    ├── v3_tfidf/               # TF-IDF + LexRank word families 
     └── v4_family_anchors/      # BERT-filtered families + TextRank anchors
 
 experiments/run.py              # single entry point; dispatches to any version
@@ -32,12 +32,26 @@ notes.
 python -m venv .venv
 source .venv/bin/activate
 pip install --upgrade pip
-pip install numpy nltk transformers torch sentence-transformers sumy
+pip install numpy nltk transformers torch sentence-transformers sumy openai
 python -c "import nltk; nltk.download('wordnet'); nltk.download('omw-1.4'); nltk.download('punkt'); nltk.download('stopwords'); nltk.download('averaged_perceptron_tagger')"
 ```
 
 `v1` additionally needs a 300-d GloVe-style vectors file; set its location with
 the `GLOVE_PATH` env var (see `watermarking/versions/v1_baseline_glove/README.md`).
+
+### Optional: LLM paraphrasing attack
+
+The benchmark's paraphrasing attack (attack #10 in every runner) rewrites the
+watermarked text with a local LLM served by [Ollama](https://ollama.com) at
+`http://localhost:11434`. Start the server and pull the model once:
+
+```bash
+ollama serve &
+ollama pull llama3.1:8b
+```
+
+This is optional — if Ollama is not running, the runners print
+`10. LLM Paraphrasing SKIPPED: ...` and continue with the other attacks.
 
 ## Running
 
