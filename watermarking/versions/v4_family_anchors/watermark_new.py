@@ -26,7 +26,7 @@ def _bert_filter(sentence: str, word: str, candidates: set[str], keep: int = 5) 
         return candidates
 
     masked = sentence.replace(word, _bert_tok.mask_token, 1)
-    if _bert_tok.mask_token not in masked:        # word not found verbatim
+    if _bert_tok.mask_token not in masked:  # word not found verbatim
         return candidates
 
     inputs = _bert_tok(masked, return_tensors="pt")
@@ -41,12 +41,12 @@ def _bert_filter(sentence: str, word: str, candidates: set[str], keep: int = 5) 
     scored = []
     for cand in candidates:
         ids = _bert_tok.encode(cand, add_special_tokens=False)
-        if len(ids) != 1:                         # skip multi-token candidates
+        if len(ids) != 1:  # skip multi-token candidates
             continue
         scored.append((cand, probs[ids[0]].item()))
 
     if not scored:
-        return candidates                         # nothing single-token; fall back
+        return candidates  # nothing single-token; fall back
     scored.sort(key=lambda x: x[1], reverse=True)
     return {c for c, _ in scored[:keep]}
 
@@ -77,11 +77,11 @@ def pos_tag(tokens):
 
 def is_content_word(token: str, tag: str) -> bool:
     return (
-        tag.startswith(("NN", "VB", "JJ", "RB"))
-        and not tag.startswith(("NNP", "NNPS"))
-        and token.lower() not in STOPWORDS
-        and token not in PUNCT
-        and token.isalpha()
+            tag.startswith(("NN", "VB", "JJ", "RB"))
+            and not tag.startswith(("NNP", "NNPS"))
+            and token.lower() not in STOPWORDS
+            and token not in PUNCT
+            and token.isalpha()
     )
 
 
@@ -160,8 +160,10 @@ def textrank(sim_matrix: np.ndarray, damping: float = 0.85,
 
     # Row-normalise; handle all-zero rows with uniform fallback
     row_sums = A.sum(axis=1, keepdims=True)
+    zero_rows = (row_sums == 0).flatten()
     row_sums[row_sums == 0] = 1.0
     A = A / row_sums
+    A[zero_rows] = 1.0 / n
 
     # Power iteration
     scores = np.ones(n) / n
@@ -175,9 +177,8 @@ def textrank(sim_matrix: np.ndarray, damping: float = 0.85,
 
 def find_main_sentence(sentences: list[str]) -> tuple[int, str]:
     """
-    Select the sentence that is most central to the whole document
-    Steps:
-      1. Embed sentences with BERT
+    Select the sentence that is most central to the whole document:
+      1. Embed sentences with SentenceTransformer embeddings + TextRank
       2. Compute pairwise cosine similarity
       3. Run TextRank
     Return the index and text of the highest-scoring sentence
@@ -212,51 +213,69 @@ def is_green(anchor_seed: str, candidate: str) -> bool:
     return int(hashlib.sha256(key).hexdigest(), 16) % 2 == 0
 
 
+def build_member_to_root(families: dict[str, set[str]]) -> dict[str, str]:
+    """
+    Map every family member (including the root itself) to that family's
+    root/representative. Used so that whichever synonym actually appears in
+    text can be resolved back to the single word that identifies its family.
+    """
+    mapping: dict[str, str] = {}
+    for root, members in families.items():
+        mapping[root] = root
+        for member in members:
+            mapping[member] = root
+    return mapping
+
+
 def pick_sentence_anchor(tagged: list[tuple[str, str]], anchor_families: dict[str, set[str]]) -> str | None:
     """
-    Return the single anchor *root* to use for this sentence.
+    Return the anchor *family representative (root)* to use for this sentence.
 
-    A token matches if its lower-case form appears in *anchor_member_to_root*, which
-    maps every family member (including the root itself) to the family root.
-    This means any synonym of a main-sentence contextual word can serve as an
-    anchor, not just the root word itself.
+    A token matches if its lower-case form appears in any anchor family
 
-    Among all matching tokens, choose the one whose family is smallest.
-    Ties are broken alphabetically (by resolved root) for determinism.
+    (root or any synonym member) — so any synonym of a main-sentence
+    contextual word can serve as an anchor, not just the root word itself.
+
+    Among all matching tokens, choose the one belonging to the smallest
+    family. Ties are broken alphabetically (by resolved root) for determinism.
+
+    Critically, the value returned is always the family's root/representative,
+    never the literal surface token that matched — so every sentence anchored
+    on the same family is seeded identically, regardless of which synonym of
+    that family happened to appear.
 
     Returns None if the sentence contains no anchor word.
     """
-    best_word: str | None = None
+    member_to_root = build_member_to_root(anchor_families)
+
+    best_root: str | None = None
     best_size: int = 0
-    anchor_members = [item for sublist in anchor_families.values() for item in sublist]
 
     for tok, tag in tagged:
         word = tok.lower()
-        if word not in anchor_members:
+        if word not in member_to_root:
             continue
         if not is_content_word(tok, tag):
             continue
-        fam = build_family(word, tag)
-        if fam is None:                # word has no synonym family -> cannot size it
-            continue
-        size = len(fam)
-        if best_word is None or size < best_size or (size == best_size and word < best_word):
-            best_word = word
+        root = member_to_root[word]
+        size = len(anchor_families[root])
+        if best_root is None or size < best_size or (size == best_size and root < best_root):
+            best_root = root
             best_size = size
 
-    return best_word
+    return best_root
 
 
 def rewrite_sentence(sentence: str,
                      anchor_families: dict[str, set[str]],
-                     context_families: dict[str, set[str]],) -> tuple[str, list[tuple[str, str]]]:
+                     context_families: dict[str, set[str]], ) -> tuple[str, list[tuple[str, str]]]:
     """
     Rewrite one non-main sentence using anchor encoding.
 
-    A single anchor root is chosen for the whole sentence via pick_sentence_anchor,
-    which now resolves any family member (not just the root) as a valid anchor.
-    Every non-anchor context word is then evaluated against that fixed anchor:
-    if the word is *red* and a green synonym exists, it is replaced.
+    A single anchor root is chosen for the whole sentence via *pick_sentence_anchor*,
+    which resolves any family member as a valid anchor.
+    Every non-anchor context word is then evaluated against the representative/root of family
+    of that fixed anchor: if the word is *red* and a *green* synonym exists, it is replaced.
 
     Returns the rewritten sentence and a list of (original, replacement) pairs.
     """
@@ -301,7 +320,7 @@ def watermark(text: str) -> dict:
     if len(sentences) < 2:
         raise ValueError("Text must contain at least 2 sentences.")
 
-    # 1. Find main/anchor sentence via BERT + TextRank
+    # 1. Find main/anchor sentence via SentenceTransformer embeddings + TextRank
     main_idx, main_sent = find_main_sentence(sentences)
 
     # 2. Identify anchor families from the main sentence
@@ -420,7 +439,7 @@ def detect(text: str) -> dict:
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    with open("../../text.txt") as f:
+    with open("text_faust.txt") as f:
         DEMO_TEXT = f.read().strip()
 
     SEP = "=" * 70
