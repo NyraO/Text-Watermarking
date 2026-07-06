@@ -6,7 +6,7 @@ from nltk import pos_tag
 # from groq import Groq
 from random import randrange
 from nltk import sent_tokenize
-from act_pas_lib.act_pas import *
+from watermarking.common.act_pas.act_pas import *
 
 def tokenizer(text):
     return re.findall(r'\w+|[^\w\s]', text)

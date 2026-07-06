@@ -406,7 +406,9 @@ def detect(text: str, context_families: dict[str, set[str]] | None = None) -> di
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    with open("text.txt") as f:
+    import os
+    _root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+    with open(os.path.join(_root, "data", "inputs", "text.txt")) as f:
         DEMO_TEXT = f.read().strip()
 
     SEP = "=" * 70

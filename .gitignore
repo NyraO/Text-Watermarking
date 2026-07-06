@@ -12,12 +12,16 @@ __pycache__/
 
 # for the large GloVe vectors
 *.txt
-# keep source text files if they are small
+# keep the curated input corpus (small source texts)
 !bbc.txt
 !goethe.txt
+!data/inputs/
+!data/inputs/*.txt
 
 # --- Project Specifics ---
-# Ignore the watermarked output files  
+# Generated experiment outputs live in results/ and are not tracked
+results/*
+!results/.gitkeep
 watermarked_*.txt
 experiment_results.csv
 

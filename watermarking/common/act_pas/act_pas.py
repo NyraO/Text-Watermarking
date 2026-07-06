@@ -1,4 +1,4 @@
-from act_pas_lib.act_pas_helper import *
+from watermarking.common.act_pas.act_pas_helper import *
 
 does = ['do', 'did', 'does']
 wh_q = ['when', 'where', 'how', 'why']

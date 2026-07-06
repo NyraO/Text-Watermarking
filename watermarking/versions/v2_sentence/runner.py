@@ -1,11 +1,13 @@
-import sentence_watermark as swm  
-import attack as atk 
+from watermarking.versions.v2_sentence import sentence_watermark as swm
+from watermarking.versions.v2_sentence import attack as atk
 import os
 
 def save_text(filename, text_content):
-    """Helper to save text to an outputs directory."""
-    os.makedirs("outputs", exist_ok=True)
-    filepath = os.path.join("outputs", filename)
+    """Helper to save text to the repo-level results/ directory."""
+    _root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+    outdir = os.path.join(_root, "results")
+    os.makedirs(outdir, exist_ok=True)
+    filepath = os.path.join(outdir, filename)
     with open(filepath, "w", encoding="utf-8") as f:
         f.write(text_content)
     print(f"  -> Saved: {filepath}")
@@ -104,4 +106,5 @@ def run_sentence_experiment(file_name):
     print(f"\n--- BENCHMARK COMPLETE FOR {file_name} ---")
 
 if __name__ == "__main__":
-    run_sentence_experiment("../bbc.txt")
+    _ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+    run_sentence_experiment(os.path.join(_ROOT, "data", "inputs", "bbc.txt"))

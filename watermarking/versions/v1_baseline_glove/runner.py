@@ -1,5 +1,5 @@
-import watermark as wm  
-import attack as atk 
+from watermarking.versions.v1_baseline_glove import watermark as wm
+from watermarking.common import attack as atk
 
 def run_experiment(file_name):
     with open(file_name, 'r') as f:
@@ -77,5 +77,6 @@ def run_experiment(file_name):
     print(f"\n--- BENCHMARK COMPLETE FOR {file_name} ---")
 
 if __name__ == "__main__":
-   
-    run_experiment("bbc.txt")
+    import os
+    _ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+    run_experiment(os.path.join(_ROOT, "data", "inputs", "bbc.txt"))

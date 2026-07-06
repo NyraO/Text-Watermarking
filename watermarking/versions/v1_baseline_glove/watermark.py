@@ -11,7 +11,14 @@ import torch
 # CONFIGURATION
 SECRET_KEY = "amina_secure_key_2026"
 TAU = 0.1 # 10% anchors
-GLOVE_PATH = "../..//wiki_giga_2024_300_MFT20_vectors_seed_2024_alpha_0.75_eta_0.05_combined.txt" 
+# Resolve the GloVe vectors relative to the repo root so the path holds
+# regardless of the current working directory. Override with the GLOVE_PATH env var.
+_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+GLOVE_PATH = os.environ.get(
+    "GLOVE_PATH",
+    os.path.join(_REPO_ROOT, "..", "..",
+                 "wiki_giga_2024_300_MFT20_vectors_seed_2024_alpha_0.75_eta_0.05_combined.txt"),
+)
 print("loading BERK Masked language model")
 bert_fill_mask = pipeline("fill-mask", model = "bert-base-uncased")
 FILES_TO_PROCESS = ["bbc.txt", "goethe.txt"]
